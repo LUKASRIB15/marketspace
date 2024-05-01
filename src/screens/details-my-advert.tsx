@@ -1,5 +1,5 @@
-import { useNavigation } from "@react-navigation/native";
-import { Box, HStack, Heading, ScrollView, Text, VStack, useTheme } from "native-base";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { Box, HStack, Heading, ScrollView, Text, VStack, useTheme, useToast } from "native-base";
 import { ArrowLeft, Bank, Barcode, CreditCard, Money, PencilSimpleLine, Power, QrCode, TrashSimple, WhatsappLogo } from "phosphor-react-native";
 import { TouchableOpacity } from "react-native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
@@ -7,12 +7,80 @@ import { Carousel } from "../components/Carousel";
 import { Profile } from "../components/Profile";
 import { Button } from "../components/Button";
 import { useState } from "react";
+import { useProductsContext } from "../hooks/useProductsContext";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { api } from "../lib/api";
+import { formatPrice } from "../utils/formatPrice";
+import { PaymentMethod } from "../components/PaymentMethod";
+import { AppError } from "../utils/AppError";
+
+type RouteParams = {
+  id: string
+}
 
 export function DetailsMyAdvert(){
-  const [isAdvertActive, setIsAdvertActive] = useState(true)
-
+  const [isLoadingUpdateProductView, setIsLoadingUpdateProductView] = useState(false)
+  const [isLoadingRemoveProduct, setIsLoadingRemoveProduct] = useState(false)
+  
+  const {productsOfUser, updateProductView, removeProductOfUser} = useProductsContext()
+  const {user} = useAuthContext()
+  
   const {colors} = useTheme()
+  const toast = useToast()
   const navigation = useNavigation<AppNavigatorRoutesProps>()
+  const router = useRoute()
+  
+  const {id} = router.params as RouteParams
+  
+  const product = productsOfUser.filter(product=>{
+    return product.id === id
+  })[0]
+  
+  const [isAdvertActive, setIsAdvertActive] = useState(product.is_active)
+
+  async function handleToggleProductView(){
+    try{
+      setIsLoadingUpdateProductView(true)
+      await updateProductView(product.id, product.is_active)
+      setIsAdvertActive(!isAdvertActive)
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const updateAction = product.is_active ? "Desativar" : "Ativar"
+      const title = isAppError ? error.message : `Não foi possível ${updateAction}. Tente novamente mais tarde`
+
+      toast.closeAll()
+
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+      
+    }finally{
+      setIsLoadingUpdateProductView(false)
+    }
+  }
+  
+  async function handleRemoveProduct(){
+    try{
+      setIsLoadingRemoveProduct(true)
+      await removeProductOfUser(product.id)
+      navigation.goBack()
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : `Não foi possível remover esse produto. Tente novamente mais tarde`
+
+      toast.closeAll()
+
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }finally{
+      setIsLoadingRemoveProduct(false)
+    }
+  }
 
   return (
     <ScrollView
@@ -32,13 +100,13 @@ export function DetailsMyAdvert(){
             <ArrowLeft color={colors.gray[900]}/>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={()=>navigation.navigate("formAdvert")}
+            onPress={()=>navigation.navigate("formAdvert", {id: product.id})}
           >
             <PencilSimpleLine color={colors.gray[900]}/>
           </TouchableOpacity>
         </HStack>
         
-        <Carousel isActive={isAdvertActive} />
+        <Carousel isActive={isAdvertActive} imagesOfProduct={product.product_images}/>
 
         <VStack
           px={6}
@@ -51,9 +119,9 @@ export function DetailsMyAdvert(){
             <Profile 
               w={7}
               h={7}
-              sourceImage="https://github.com/LUKASRIB15.png"
+              sourceImage={`${api.defaults.baseURL}/images/${user.avatar}`}
             />
-            <Text>Lucas Ribeiro</Text>
+            <Text>{user.name}</Text>
           </HStack>
           <VStack
             mt={6}
@@ -72,7 +140,7 @@ export function DetailsMyAdvert(){
                 textTransform={"uppercase"}
                 fontSize={'xs'}
               >
-                Usado
+                {product.is_new ? "novo" : "usado"}
               </Text>
             </Box>
             <HStack
@@ -84,7 +152,7 @@ export function DetailsMyAdvert(){
                 fontSize={'lg'}
                 color={"gray.900"}
               >
-                Luminária pendente
+                {product.name}
               </Heading>
               <Text
                 fontSize={'lg'}
@@ -96,15 +164,14 @@ export function DetailsMyAdvert(){
                 >
                   R$ 
                 </Text>
-                <Text> 45,00</Text>
+                <Text>{formatPrice(product.price)}</Text>
               </Text>
             </HStack>
             <Text
               color={"gray.800"}
               mt={2}
             >
-              Cras congue cursus in tortor sagittis placerat nunc, tellus arcu. 
-              Vitae ante leo eget maecenas urna mattis cursus. 
+              {product.description} 
             </Text>
             <HStack
               space={2}
@@ -116,7 +183,7 @@ export function DetailsMyAdvert(){
               >
                 Aceita troca?
               </Text>
-              <Text>Não</Text>
+              <Text>{product.accept_trade ? "Sim": "Não"}</Text>
             </HStack>
             <VStack
               mt={6}
@@ -127,27 +194,17 @@ export function DetailsMyAdvert(){
               >
                 Meios de pagamento:
               </Text>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Barcode size={20}/>
-                 <Text>Boleto</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <QrCode size={20}/>
-                 <Text>Pix</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Bank size={20}/>
-                 <Text>Depósito Bancário</Text>
-              </HStack>
+              {
+                product.payment_methods.map(method=>{
+                  return (
+                    <PaymentMethod 
+                      key={method.key} 
+                      method={method.key} 
+                      name={method.name}
+                    />
+                  )
+                })
+              }
             </VStack>
           </VStack>
         </VStack>
@@ -157,7 +214,11 @@ export function DetailsMyAdvert(){
           space={2}
           mb={12}
         >
-          <Button bgVariant={isAdvertActive ? "dark" : "primary"} onPress={()=>setIsAdvertActive(!isAdvertActive)}>
+          <Button 
+            bgVariant={isAdvertActive ? "dark" : "primary"} 
+            onPress={handleToggleProductView}
+            isLoading={isLoadingUpdateProductView}
+          >
             <Button.Icon>
               <Power color={colors.gray[100]}/>
             </Button.Icon>
@@ -167,7 +228,11 @@ export function DetailsMyAdvert(){
               }
             </Button.Text>
           </Button>
-          <Button bgVariant="light">
+          <Button 
+            bgVariant="light"
+            isLoading={isLoadingRemoveProduct}
+            onPress={handleRemoveProduct}
+          >
             <Button.Icon>
               <TrashSimple color={colors.gray[900]}/>
             </Button.Icon>

@@ -1,18 +1,79 @@
-import { HStack, Heading, Text, VStack, useTheme, Input, Box, Divider, FlatList } from "native-base";
+import { HStack, Heading, Text, VStack, useTheme, Input, Box, Divider, FlatList, useToast } from "native-base";
 import { Profile } from "../components/Profile";
 import { Button } from "../components/Button";
 import { ArrowRight, MagnifyingGlass, Plus, Sliders, Tag } from "phosphor-react-native";
-import { TouchableOpacity } from "react-native";
+import { Dimensions, TouchableOpacity } from "react-native";
 import { Card } from "../components/Card";
 import { FilterAdverts } from "../components/FilterAdverts";
-import { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useCallback, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { api } from "../lib/api";
+import { useProductsContext } from "../hooks/useProductsContext";
+import { AppError } from "../utils/AppError";
+import { Loading } from "../components/Loading";
 
 export function Catalog(){
+  const {user} = useAuthContext()
+  const {
+    productsOfUser, 
+    listOfOthersProducts,
+    getProductsOfUser, 
+    searchProducts, 
+    selectedFilters,
+    fetchOthersProductsWhenRenderingFirstTime
+  } = useProductsContext()
   const {colors} = useTheme()
+  const toast = useToast()
   const navigation = useNavigation<AppNavigatorRoutesProps>()
+  const [query, setQuery] = useState('')
   const [openFilterAdverts, setOpenFilterAdverts] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const firstName = user.name.split(' ')[0]
+  const screenWidth = Dimensions.get('window').width
+  const productsActives = productsOfUser.filter(product=>{
+    return product.is_active
+  })
+
+  async function handleSearchProducts(){
+    try{
+      setIsLoading(true)
+      await searchProducts(selectedFilters, query)
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : "Não foi possível realizar buscas dos produtos"
+
+      toast.closeAll()
+
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }finally{
+      setIsLoading(false)
+    }
+  }
+
+  useFocusEffect(useCallback(()=>{
+    try{
+      getProductsOfUser()
+      fetchOthersProductsWhenRenderingFirstTime()
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : "Não foi possível buscar informações sobre os produtos. Tente novamente mais tarde!"
+    
+      toast.closeAll()
+
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }
+  },[]))
 
   return (
     <VStack
@@ -31,7 +92,7 @@ export function Catalog(){
           <Profile 
             w={45} 
             h={45}
-            sourceImage="https://github.com/LUKASRIB15.png"
+            sourceImage={`${api.defaults.baseURL}/images/${user.avatar}`}
           />
           <VStack>
             <Text
@@ -43,7 +104,7 @@ export function Catalog(){
             <Heading
               fontSize={'md'}
             >
-              Lucas!
+              {firstName}!
             </Heading>
           </VStack>
         </HStack>
@@ -90,7 +151,7 @@ export function Catalog(){
                   color={"gray.800"}
                   fontSize={'lg'}
                 >
-                  4
+                  {productsActives.length}
                 </Heading>
                 <Text
                   fontSize={'xs'}
@@ -137,6 +198,8 @@ export function Catalog(){
             style={{
               paddingRight: 112
             }}
+            value={query}
+            onChangeText={setQuery}
           />
           <HStack
             position={"absolute"}
@@ -144,7 +207,9 @@ export function Catalog(){
             bottom={3.5}
             space={4}
           >
-            <TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSearchProducts}
+            >
               <MagnifyingGlass />
             </TouchableOpacity>
             <Divider orientation="vertical"/>
@@ -156,26 +221,34 @@ export function Catalog(){
           </HStack> 
         </Box>
       </VStack>
-      <FlatList 
-        data={[1,2,3,4,5,6,7,8,9,10]}
-        keyExtractor={(item)=>item.toString()}
+      {
+        isLoading ?
+          <Loading />
+          :
+          <FlatList 
+        data={listOfOthersProducts}
+        keyExtractor={(item)=>item.id}
         numColumns={2}
-        columnWrapperStyle={{columnGap:32}}
+        columnWrapperStyle={{columnGap: screenWidth-(154*2)-(24*2)}}
         showsVerticalScrollIndicator={false}
         renderItem={(({item})=>(
           <Card
-            isNew={item%3===0}
-            isActive={item%4===2}
-            key={item}
-            src={"https://github.com/italoopaula.png"}
+            idOfProduct={item.id}
+            nameOfProduct={item.name}
+            price={item.price}
+            isNew={item.is_new}
+            isActive
+            key={item.id}
+            src={`${api.defaults.baseURL}/images/${item.user.avatar}`}
+            srcOfProduct={`${api.defaults.baseURL}/images/${item.product_images[0].path}`}
           />
         ))}
         contentContainerStyle={{
           paddingBottom: 50,
-          alignItems: "center",
           rowGap: 32
         }}
       />
+      }
       <FilterAdverts
         isOpen={openFilterAdverts}
         onClose={() => setOpenFilterAdverts(false)}

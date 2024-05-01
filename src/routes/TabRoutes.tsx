@@ -2,9 +2,9 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Catalog } from "../screens/catalog"
 import { Adverts } from "../screens/adverts"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import { Text, useTheme } from "native-base"
-import { TouchableOpacity } from "react-native"
+import { useTheme } from "native-base"
 import { House, SignOut, Tag } from "phosphor-react-native"
+import { useAuthContext } from "../hooks/useAuthContext"
 
 type TabRoutesParamsProps = {
   catalog: undefined
@@ -18,6 +18,7 @@ const Tabs = createBottomTabNavigator<TabRoutesParamsProps>()
 
 export function TabRoutes(){
   const {colors} = useTheme()
+  const {signOut} = useAuthContext()
 
   return (
     <Tabs.Navigator
@@ -59,7 +60,7 @@ export function TabRoutes(){
       <Tabs.Screen 
         name="exit"  
         children={()=>{
-          console.log("cliquei")
+          signOut()
           return null
         }}
         options={{

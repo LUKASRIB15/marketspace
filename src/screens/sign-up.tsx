@@ -1,18 +1,27 @@
-import { Center, Heading, ScrollView, Text, VStack } from "native-base";
+import { Box, Center, Heading, Image, ScrollView, Text, VStack, useTheme, useToast } from "native-base";
 import { Input } from "../components/Input";
 
 import LogoSvg from "../assets/logo.svg"
 import { Button } from "../components/Button";
-import { Profile } from "../components/Profile";
 import { useNavigation } from "@react-navigation/native";
 import { useForm, Controller } from "react-hook-form";
 import * as yup from "yup"
 import {yupResolver} from "@hookform/resolvers/yup"
+import { useState } from "react";
+import { TouchableOpacity } from "react-native";
+
+import * as ImagePicker from "expo-image-picker"
+import { PencilSimpleLine } from "phosphor-react-native";
+
+import AvatarPng from "../assets/avatar.png"
+import { AppError } from "../utils/AppError";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { NewUser } from "../contexts/AuthContext";
 
 type SignUpFormData = {
   name: string
   email: string
-  phone: string
+  tel: string
   password: string
   confirmPassword: string
 }
@@ -20,20 +29,67 @@ type SignUpFormData = {
 const SignUpFormDataSchema = yup.object({
   name: yup.string().required("Informe seu nome!"),
   email: yup.string().required("Informe o seu email!").email("Seu email é inválido!"),
-  phone: yup.string().required("Informe seu telefone!"),
+  tel: yup.string().required("Informe seu telefone!"),
   password: yup.string().required("Informe sua senha!").min(5, "A senha deve conter no mínimo 5 caracteres!"),
   confirmPassword: yup.string().required("Confirme sua senha!").min(5, "A senha deve conter no mínimo 5 caracteres!").oneOf([yup.ref("password")], "As senhas devem ser iguais!")
 })
 
 export function SignUp(){
   const navigation = useNavigation()
+  const {colors} = useTheme()
+  const toast = useToast()
+  const {signUp} = useAuthContext()
+
+  const [imageProfile ,setImageProfile] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   const {handleSubmit, control, formState: {errors}} = useForm<SignUpFormData>({
     resolver: yupResolver(SignUpFormDataSchema)
   })
 
-  function handleSignUp(data: SignUpFormData){
-    console.log(data)
+  async function handleSignUp({name, email, tel, password}: SignUpFormData){
+    try{
+      setIsLoading(true)
+      if(!imageProfile){
+        throw new AppError('É necessário cadastrar uma imagem de perfil')
+      }
+
+      const newUser : NewUser = {
+        name,
+        email,
+        tel,
+        password,
+        avatar: imageProfile
+      }
+
+      await signUp(newUser)
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : "Não foi possível criar uma conta. Tente novamente mais tarde!"
+    
+      toast.closeAll()
+      
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }finally{
+      setIsLoading(false)
+    }
+  }
+
+  async function handleAddPhotoOfProfile(){
+    const photoSelected = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+      aspect: [4, 4]
+    })
+
+    if(photoSelected.assets && photoSelected.assets[0].uri){
+      setImageProfile(photoSelected.assets[0].uri)
+    }
   }
 
   return (
@@ -74,12 +130,33 @@ export function SignUp(){
             alignItems={"center"}
             space={4}
           >
-            <Profile 
-              w={88} 
-              h={88}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleAddPhotoOfProfile}
+            >
               
-              showButtonEdit
-            />
+              <Image 
+                source={imageProfile ? {uri: imageProfile} : AvatarPng} 
+                alt="Imagem de perfil atual do usuário" 
+                w={88} 
+                h={88}
+                rounded={999}
+                borderWidth={3}
+                borderColor={'blue.500'}
+                resizeMode="cover"
+              />
+                <Box
+                  p={3}
+                  rounded={999}
+                  bg={"blue.500"}
+                  position={"absolute"}
+                  bottom={-5}
+                  right={-5}
+                >
+                  <PencilSimpleLine size={16} color={colors.gray[100]}/>
+                </Box>
+              
+            </TouchableOpacity>
             <Controller 
               control={control}
               name="name"
@@ -108,13 +185,13 @@ export function SignUp(){
             />
             <Controller 
               control={control}
-              name="phone"
+              name="tel"
               render={({field})=>(
                 <Input 
                   placeholder="Telefone"
                   value={field.value}
                   onChangeText={field.onChange}
-                  errorMessage={errors.phone?.message}
+                  errorMessage={errors.tel?.message}
                 />
               )}
             />
@@ -151,6 +228,7 @@ export function SignUp(){
             bgVariant="dark"
             w={"100%"}
             onPress={handleSubmit(handleSignUp)}
+            isLoading={isLoading}
           >
             <Button.Text>Criar</Button.Text>
           </Button>

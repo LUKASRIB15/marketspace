@@ -1,25 +1,21 @@
 import { Box, FlatList, Heading, Image, VStack } from "native-base"
 import { useState, useRef } from "react"
 import { Dimensions } from "react-native"
+import { api } from "../lib/api"
+
+type ProductImage = {
+  path: string
+  id: string
+}
 
 type CarouselProps = {
   isActive: boolean
+  imagesOfProduct: ProductImage[]
+  preview?: boolean
 }
 
 
-const DATA = [
-  {
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-  },
-  {
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-  },
-  {
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1999&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-  }
-]
-
-export function Carousel({isActive}: CarouselProps){
+export function Carousel({isActive, preview=false,imagesOfProduct}: CarouselProps){
   const [activeBanner, setActiveBanner] = useState<number>(0)
   const screenWidth = Dimensions.get("window").width
 
@@ -47,8 +43,8 @@ export function Carousel({isActive}: CarouselProps){
     >
       <FlatList 
         ref={viewabilityConfigCallbackPairs}
-        data={DATA}
-        keyExtractor={(item)=>item.image}
+        data={imagesOfProduct}
+        keyExtractor={(item)=>item.id}
         horizontal
         showsHorizontalScrollIndicator={false}
         pagingEnabled
@@ -61,7 +57,12 @@ export function Carousel({isActive}: CarouselProps){
             >
               
               <Image 
-                source={{uri: item.image}}
+                source={
+                  preview ? 
+                    {uri: item.path}
+                  :
+                    {uri: `${api.defaults.baseURL}/images/${item.path}`}
+                }
                 w={screenWidth}
                 h={280}
                 alignSelf={"center"}
@@ -80,7 +81,7 @@ export function Carousel({isActive}: CarouselProps){
         right={1}
       >
         <FlatList 
-          data={DATA}
+          data={imagesOfProduct}
           keyExtractor={(item, index)=>index.toString()}
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -90,7 +91,7 @@ export function Carousel({isActive}: CarouselProps){
               <Box
                 opacity={activeBanner === index ? 0.75 : 0.5}
                 h={1}
-                w={screenWidth/DATA.length}
+                w={(screenWidth/imagesOfProduct.length)-8}
                 rounded={999}
                 bg={"gray.100"}
               />

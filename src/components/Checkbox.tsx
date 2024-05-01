@@ -15,7 +15,7 @@ export function Checkbox({isChecked, label, onValueChange}:CheckboxProps){
       space={2}
       alignItems={"center"}
     >
-      <ExpoCheckbox 
+      <ExpoCheckbox
         value={isChecked} 
         onValueChange={onValueChange}
         color={isChecked ? colors.blue[500] : colors.gray[300] }

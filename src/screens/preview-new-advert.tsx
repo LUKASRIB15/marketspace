@@ -1,15 +1,91 @@
 import { StatusBar } from "react-native";
-import { Box, HStack, Heading, ScrollView, Text, VStack, useTheme } from "native-base";
+import { Box, HStack, Heading, ScrollView, Text, VStack, useTheme, useToast } from "native-base";
 import { Carousel } from "../components/Carousel";
 import { Profile } from "../components/Profile";
 import { ArrowLeft, Bank, Barcode, CreditCard, Money, QrCode, Tag } from "phosphor-react-native";
 import { Button } from "../components/Button";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
+import { useProductsContext } from "../hooks/useProductsContext";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { api } from "../lib/api";
+import { formatPrice } from "../utils/formatPrice";
+import { PaymentMethod } from "../components/PaymentMethod";
+import { AppError } from "../utils/AppError";
+import { useState } from "react";
+
+type RouteParams = {
+  id: string
+} | undefined
 
 export function PreviewNewAdvert(){
+  const [isLoading, setIsLoading] = useState(false)
+
+  const {productPreview, createProduct, editProduct} = useProductsContext()
+  const {user} = useAuthContext()
+
   const navigation = useNavigation<AppNavigatorRoutesProps>()
+  const route = useRoute()
+
+  const params = route.params as RouteParams
+
+  const productExists = Boolean(params)
+
   const {colors} = useTheme()
+  const toast = useToast()
+
+  const productImagesWithId = productPreview.product_images.map((product, index)=>{
+    return {
+      path: product,
+      id: index.toString()
+    }
+  })
+
+  async function handleEditProduct(){
+    try{
+      setIsLoading(true)
+
+      await editProduct(params!.id)
+
+      navigation.navigate("tabRoutes")
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : "Não foi possível editar o seu produto. Tente novamente mais tarde!"
+    
+      toast.closeAll()
+
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }finally{
+      setIsLoading(false)
+    }
+  }
+
+  async function handleCreateNewProduct(){
+    try{
+      setIsLoading(true)
+      await createProduct()
+
+      navigation.navigate('tabRoutes')
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : "Não foi possível publicar o seu anúncio. Tente novamente mais tarde!"
+    
+      toast.closeAll()
+      
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }finally{
+      setIsLoading(false)
+    }
+  }
+
 
   return (
     <VStack
@@ -40,7 +116,11 @@ export function PreviewNewAdvert(){
         contentContainerStyle={{paddingBottom: 20}}
       >
         
-        <Carousel isActive/>
+        <Carousel 
+          isActive 
+          preview={true}
+          imagesOfProduct={productImagesWithId}
+        />
         
         <VStack
           px={6}
@@ -53,9 +133,9 @@ export function PreviewNewAdvert(){
             <Profile 
               w={7}
               h={7}
-              sourceImage="https://github.com/LUKASRIB15.png"
+              sourceImage={`${api.defaults.baseURL}/images/${user.avatar}`}
             />
-            <Text>Lucas Ribeiro</Text>
+            <Text>{user.name}</Text>
           </HStack>
           <VStack
             mt={6}
@@ -74,7 +154,7 @@ export function PreviewNewAdvert(){
                 textTransform={"uppercase"}
                 fontSize={'xs'}
               >
-                Novo
+                {productPreview.is_new ? "Novo" : "Usado" }
               </Text>
             </Box>
             <HStack
@@ -86,7 +166,7 @@ export function PreviewNewAdvert(){
                 fontSize={'lg'}
                 color={"gray.900"}
               >
-                Bicicleta
+                {productPreview.title}
               </Heading>
               <Text
                 fontSize={'lg'}
@@ -98,17 +178,14 @@ export function PreviewNewAdvert(){
                 >
                   R$ 
                 </Text>
-                <Text> 120,00</Text>
+                <Text>{formatPrice(productPreview.price)}</Text>
               </Text>
             </HStack>
             <Text
               color={"gray.800"}
               mt={2}
             >
-              Cras congue cursus in tortor sagittis placerat nunc, tellus arcu. 
-              Vitae ante leo eget maecenas urna mattis cursus. 
-              Mauris metus amet nibh mauris mauris accumsan, euismod. 
-              Aenean leo nunc, purus iaculis in aliquam.
+              {productPreview.description}
             </Text>
             <HStack
               space={2}
@@ -120,7 +197,7 @@ export function PreviewNewAdvert(){
               >
                 Aceita troca?
               </Text>
-              <Text>Sim</Text>
+              <Text>{productPreview.accept_trade ? "Sim" : "Não"}</Text>
             </HStack>
             <VStack
               mt={6}
@@ -131,41 +208,15 @@ export function PreviewNewAdvert(){
               >
                 Meios de pagamento:
               </Text>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Barcode size={20}/>
-                 <Text>Boleto</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <QrCode size={20}/>
-                 <Text>Pix</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Money size={20}/>
-                 <Text>Dinheiro</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <CreditCard size={20}/>
-                 <Text>Cartão de Crédito</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Bank size={20}/>
-                 <Text>Depósito Bancário</Text>
-              </HStack>
+              {productPreview.payment_methods.map(method=>{
+                return (
+                  <PaymentMethod  
+                    key={method.key} 
+                    method={method.key} 
+                    name={method.name}
+                  />
+                )
+              })}
             </VStack>
           </VStack>
         </VStack>
@@ -190,7 +241,8 @@ export function PreviewNewAdvert(){
           </Button>
           <Button 
             flex={1}
-            onPress={()=>{}}
+            onPress={productExists ? handleEditProduct : handleCreateNewProduct}
+            isLoading={isLoading}
           >
             <Button.Icon>
               <Tag color={colors.gray[100]} size={16}/>

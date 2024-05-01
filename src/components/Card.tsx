@@ -1,39 +1,59 @@
 import { Box, HStack, Heading, Image, Text, VStack } from "native-base";
 
-import ShoesPng from "../assets/shoes.png"
 import AvatarPng from "../assets/avatar.png"
 import { TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
+import { formatPrice } from "../utils/formatPrice";
+import { useProductsContext } from "../hooks/useProductsContext";
 
 type CardProps = {
+  idOfProduct: string
   src?: string | null
+  srcOfProduct: string 
+  price: number
+  nameOfProduct: string
   isNew: boolean
   isActive: boolean
   isMyAdvert?: boolean
 }
 
-export function Card({src=null, isNew, isActive, isMyAdvert=false}:CardProps){
+export function Card({
+  src=null, 
+  isNew,
+  idOfProduct, 
+  isActive, 
+  srcOfProduct, 
+  nameOfProduct, 
+  price, 
+  isMyAdvert=false
+  }:CardProps){
   const navigation = useNavigation<AppNavigatorRoutesProps>()
 
   const srcIsDifferentOfNull = Boolean(src)
 
+  const {dataAboutProduct} = useProductsContext()
+
+  async function handleAccessDetailsAboutProduct(){
+    if(isMyAdvert){
+      navigation.navigate("detailsMyAdvert", {id: idOfProduct})
+    }else{
+      await dataAboutProduct(idOfProduct)
+      navigation.navigate("detailsAdvert", {id: idOfProduct})
+    }
+  }
+
   return (
     <TouchableOpacity
       activeOpacity={0.7}
-      onPress={()=>{
-        isMyAdvert ?
-          navigation.navigate("detailsMyAdvert")
-          :
-          navigation.navigate("detailsAdvert")
-      }}
+      onPress={handleAccessDetailsAboutProduct}
     >
       <VStack
         width={154}
       >
         <Box>
           <Image 
-            source={ShoesPng}
+            source={{uri: srcOfProduct}}
             resizeMode="cover"
             alt="Imagem de um sapatenis"
             width={154}
@@ -101,7 +121,7 @@ export function Card({src=null, isNew, isActive, isMyAdvert=false}:CardProps){
         </Box>
         <Text
           color={isActive ? "gray.900" : "gray.500"}
-        >Tênis vermelho</Text>
+        >{nameOfProduct}</Text>
         <Heading
           color={isActive ? "gray.900" : "gray.500"}
           
@@ -113,7 +133,7 @@ export function Card({src=null, isNew, isActive, isMyAdvert=false}:CardProps){
           <Text
             fontSize={'md'}
             lineHeight={'md'}
-          >59,90</Text>
+          >{formatPrice(price)}</Text>
         </Heading>
       </VStack>
     </TouchableOpacity>
