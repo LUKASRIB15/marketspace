@@ -3,6 +3,8 @@ import {Karla_400Regular, Karla_700Bold, useFonts} from "@expo-google-fonts/karl
 import { Center, NativeBaseProvider, Spinner, useTheme } from 'native-base';
 import { THEME } from './src/theme';
 import { Routes } from './src/routes';
+import { AuthContextProvider } from './src/contexts/AuthContext';
+import { Loading } from './src/components/Loading';
 
 
 export default function App() {
@@ -15,14 +17,16 @@ export default function App() {
   return (
     <NativeBaseProvider theme={THEME}>
     <StatusBar barStyle="dark-content" backgroundColor='#EDECEE' translucent/>
-      {
-        hasLoaded ?
-          <Routes/>
-        :
-          <Center flex={1}>
-            <Spinner />
-          </Center>
-      } 
+      <AuthContextProvider>
+        {
+          hasLoaded ?
+            
+            <Routes/>
+           
+          :
+            <Loading />
+        } 
+      </AuthContextProvider>
     </NativeBaseProvider>
   );
 }

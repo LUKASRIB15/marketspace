@@ -1,23 +1,23 @@
 import { Box, HStack, Text, useTheme } from "native-base";
-import { X, XCircle } from "phosphor-react-native";
-import { useState } from "react";
+import { XCircle } from "phosphor-react-native";
 import { TouchableOpacity } from "react-native";
 
 type TagProps = {
   condition: string
+  value: string[]
+  onChangeValue: ()=>void
 }
 
-export function Tag({condition}:TagProps){
+export function Tag({condition, value, onChangeValue }:TagProps){
   const {colors} = useTheme()
-  const [isActive, setActive] = useState(false)
 
   return (
     <TouchableOpacity
       activeOpacity={0.7}
-      onPress={()=>setActive(!isActive)}
+      onPress={onChangeValue}
     >
       <HStack
-        bg={isActive ? "blue.500" : "gray.300"}
+        bg={value.includes(condition) ? "blue.500" : "gray.300"}
         py={1}
         px={4}
         rounded={999}
@@ -27,13 +27,13 @@ export function Tag({condition}:TagProps){
         <Text
           textTransform={"uppercase"}
           fontFamily={"heading"}
-          color={isActive ? "white" : "gray.700"}
+          color={value.includes(condition) ? "white" : "gray.700"}
           fontSize={'xs'}
         >
           {condition}
         </Text>
         {
-          isActive && (
+          value.includes(condition) && (
             <Box
               position={"absolute"}
               right={1.5}

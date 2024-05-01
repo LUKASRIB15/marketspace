@@ -1,4 +1,4 @@
-import { Center, Heading, ScrollView, Text, VStack } from "native-base";
+import { Center, Heading, ScrollView, Text, VStack, useToast } from "native-base";
 import { Input } from "../components/Input";
 
 import LogoSvg from "../assets/logo.svg"
@@ -8,6 +8,10 @@ import { AuthNavigatorRoutesProps } from "../routes/AuthRoutes";
 import { useForm, Controller } from "react-hook-form";
 import * as yup from "yup"
 import {yupResolver} from "@hookform/resolvers/yup"
+import { api } from "../lib/api";
+import { AppError } from "../utils/AppError";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { useState } from "react";
 
 
 type SignInFormData = {
@@ -21,14 +25,34 @@ const signInFormDataSchema = yup.object({
 })
 
 export function SignIn(){
+  const {signIn} = useAuthContext()
+  const toast = useToast()
   const navigation = useNavigation<AuthNavigatorRoutesProps>()
+
+  const [isLoading, setIsLoading] = useState(false)
 
   const {handleSubmit, control, formState: {errors}} = useForm<SignInFormData>({
     resolver: yupResolver(signInFormDataSchema)
   })
 
-  function handleSignIn(data:SignInFormData){
-    console.log(data)
+  async function handleSignIn({email, password}:SignInFormData){
+    try{
+      setIsLoading(true)
+      await signIn(email, password)
+    }catch(error){
+      const isAppError = error instanceof AppError
+      const title = isAppError ? error.message : "Não foi possível realizar login. Tente novamente mais tarde"
+      
+      toast.closeAll()
+
+      toast.show({
+        title,
+        placement: "top",
+        bg: "red.500"
+      })
+    }finally{
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -106,6 +130,7 @@ export function SignIn(){
             bgVariant="primary"
             w={"100%"}
             onPress={handleSubmit(handleSignIn)}
+            isLoading={isLoading}
           >
             <Button.Text>Entrar</Button.Text>
           </Button>
@@ -114,6 +139,7 @@ export function SignIn(){
           alignItems={'center'}
           px={12}
           mt={12}
+          mb={6}
           space={4}
         >
           <Text

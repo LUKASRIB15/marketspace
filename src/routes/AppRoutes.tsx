@@ -6,11 +6,19 @@ import { FormAdvert } from "../screens/form-advert"
 import { PreviewNewAdvert } from "../screens/preview-new-advert"
 
 type AppRoutesParamsProps = {
-  tabRoutes: TabNavigatorRoutesProps
-  detailsAdvert: undefined
-  detailsMyAdvert: undefined
-  formAdvert: undefined
-  previewNewAdvert: undefined
+  tabRoutes: undefined
+  detailsAdvert: {
+    id: string
+  }
+  detailsMyAdvert: {
+    id: string
+  }
+  formAdvert: {
+    id: string
+  } | undefined
+  previewNewAdvert: {
+    id: string
+  } | undefined
 } 
 
 export type AppNavigatorRoutesProps = NativeStackNavigationProp<AppRoutesParamsProps>

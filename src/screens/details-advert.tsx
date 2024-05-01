@@ -1,15 +1,29 @@
-import { useNavigation } from "@react-navigation/native";
-import { Box, HStack, Heading, ScrollView, Text, VStack, useTheme } from "native-base";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { Box, HStack, Heading, ScrollView, Text, VStack, useTheme, useToast } from "native-base";
 import { ArrowLeft, Bank, Barcode, CreditCard, Money, QrCode, WhatsappLogo } from "phosphor-react-native";
 import { TouchableOpacity } from "react-native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
 import { Carousel } from "../components/Carousel";
 import { Profile } from "../components/Profile";
 import { Button } from "../components/Button";
+import { useProductsContext } from "../hooks/useProductsContext";
+import { api } from "../lib/api";
+import { formatPrice } from "../utils/formatPrice";
+import { useEffect, useState } from "react";
+import { Loading } from "../components/Loading";
+import { AppError } from "../utils/AppError";
+import { PaymentMethod } from "../components/PaymentMethod";
+
+type RouteParams = {
+  id: string
+}
 
 export function DetailsAdvert(){
   const {colors} = useTheme()
+  const toast = useToast()
   const navigation = useNavigation<AppNavigatorRoutesProps>()
+
+  const {productOfOtherUser} = useProductsContext()
 
   return (
     <ScrollView
@@ -25,7 +39,7 @@ export function DetailsAdvert(){
           <ArrowLeft color={colors.gray[900]}/>
         </TouchableOpacity>
         
-        <Carousel isActive/>
+        <Carousel isActive imagesOfProduct={productOfOtherUser.product_images}/>
 
         <VStack
           px={6}
@@ -38,9 +52,9 @@ export function DetailsAdvert(){
             <Profile 
               w={7}
               h={7}
-              sourceImage="https://github.com/italoopaula.png"
+              sourceImage={`${api.defaults.baseURL}/images/${productOfOtherUser.user.avatar}`}
             />
-            <Text>Italo Paula</Text>
+            <Text>{productOfOtherUser.user.name}</Text>
           </HStack>
           <VStack
             mt={6}
@@ -59,7 +73,7 @@ export function DetailsAdvert(){
                 textTransform={"uppercase"}
                 fontSize={'xs'}
               >
-                Novo
+                {productOfOtherUser.is_new ? "Novo" : "Usado"}
               </Text>
             </Box>
             <HStack
@@ -71,7 +85,7 @@ export function DetailsAdvert(){
                 fontSize={'lg'}
                 color={"gray.900"}
               >
-                Bicicleta
+                {productOfOtherUser.name}
               </Heading>
               <Text
                 fontSize={'lg'}
@@ -83,17 +97,14 @@ export function DetailsAdvert(){
                 >
                   R$ 
                 </Text>
-                <Text> 120,00</Text>
+                <Text>{formatPrice(productOfOtherUser.price)}</Text>
               </Text>
             </HStack>
             <Text
               color={"gray.800"}
               mt={2}
             >
-              Cras congue cursus in tortor sagittis placerat nunc, tellus arcu. 
-              Vitae ante leo eget maecenas urna mattis cursus. 
-              Mauris metus amet nibh mauris mauris accumsan, euismod. 
-              Aenean leo nunc, purus iaculis in aliquam.
+              {productOfOtherUser.description}
             </Text>
             <HStack
               space={2}
@@ -105,7 +116,7 @@ export function DetailsAdvert(){
               >
                 Aceita troca?
               </Text>
-              <Text>Sim</Text>
+              <Text>{productOfOtherUser.accept_trade ? "Sim" : "Não"}</Text>
             </HStack>
             <VStack
               mt={6}
@@ -116,41 +127,11 @@ export function DetailsAdvert(){
               >
                 Meios de pagamento:
               </Text>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Barcode size={20}/>
-                 <Text>Boleto</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <QrCode size={20}/>
-                 <Text>Pix</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Money size={20}/>
-                 <Text>Dinheiro</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <CreditCard size={20}/>
-                 <Text>Cartão de Crédito</Text>
-              </HStack>
-              <HStack
-                space={2}
-                alignItems={"center"}
-              >
-                 <Bank size={20}/>
-                 <Text>Depósito Bancário</Text>
-              </HStack>
+              {
+                productOfOtherUser.payment_methods.map(method=>{
+                  return <PaymentMethod key={method.key} method={method.key} name={method.name}/>
+                })
+              }
             </VStack>
           </VStack>
         </VStack>
@@ -171,7 +152,7 @@ export function DetailsAdvert(){
             >
               R$ 
             </Text>
-            <Text> 120,00</Text>
+            <Text>{formatPrice(productOfOtherUser.price)}</Text>
           </Text>
           <Button>
             <Button.Icon>

@@ -1,5 +1,5 @@
-import { useNavigation } from "@react-navigation/native";
-import { Box, HStack, Heading, Image, ScrollView, Text, VStack, useTheme, Radio } from "native-base";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { Box, HStack, Heading, Image, ScrollView, Text, VStack, useTheme, Radio, useToast, FormControl } from "native-base";
 import { TouchableOpacity } from "react-native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
 import { ArrowLeft, Plus, X } from "phosphor-react-native";
@@ -9,26 +9,150 @@ import * as ImagePicker from "expo-image-picker"
 import { Switch } from "react-native-switch";
 import { Checkbox } from "../components/Checkbox";
 import { Button } from "../components/Button";
+import { AppError } from "../utils/AppError";
+import { useForm, Controller } from "react-hook-form";
+import * as yup from "yup"
+import {yupResolver} from "@hookform/resolvers/yup"
+import { useProductsContext } from "../hooks/useProductsContext";
+import { priceToNumber } from "../utils/priceToNumber";
+import { ProductPreview } from "../contexts/ProductsContext";
+import { ProductDTO } from "../dtos/products";
+import { api } from "../lib/api";
+import { formatPrice } from "../utils/formatPrice";
+
+type RouteParams = {
+  id: string 
+} | undefined
+
+type AdvertFormData = {
+  accept_trade: boolean
+  condition: "new" | "used" 
+  description: string
+  price: string
+  title: string
+}
+
+type paymentMethods = {
+  key: "boleto" | "pix" | "cash" | "card" | "deposit"
+  name: string
+}
+
+const advertFormDataSchema = yup.object({
+  accept_trade: yup.boolean().required(),
+  condition: yup.string().oneOf(["new", "used"]).required("Escolha uma condição ao produto"),
+  description: yup.string().required("Seu anúncio precisa de uma descrição").min(20, "Vamos lá! Adicione no mínimo 20 caracteres para a descrição do seu produto"),
+  price: yup.string().required("Adicione um preço ao seu produto").min(4, "Deve ter no mínimo 4 caracteres contando com a vírgula ',' "),
+  title: yup.string().required("Adicione um nome para o seu anúncio")
+})
 
 export function FormAdvert(){
   const navigation = useNavigation<AppNavigatorRoutesProps>()
-  const [imagesOfAdverts, setImagesOfAdverts] = useState<string[]>([])
+  const route = useRoute()
 
-  const [acceptTrade, setAcceptTrade] = useState(false)
-  const [hasTicket, setHasTicket] = useState(false)
-  const [hasPix, setHasPix] = useState(false)
-  const [hasMoney, setHasMoney] = useState(false)
-  const [hasBankDeposit, setHasBankDeposit] = useState(false)
-  const [hasCreditCard, setHasCreditCard] = useState(false)
+  
+  const {addProductPreview, productsOfUser} = useProductsContext()
+  
+  const params = route.params as RouteParams
+  const productExists = Boolean(params)
+
+  const product:ProductDTO = productExists ? productsOfUser.filter(product=>product.id === params!.id)[0] : {} as ProductDTO
+  const imagesOfProduct = productExists ? product.product_images.map(image=>`${api.defaults.baseURL}/images/${image.path}`) : []
+  const productCondition = productExists ? product.is_new ? "new" : "used" : undefined
+  const paymentMethodsOfProduct = productExists ? product.payment_methods : []
+
+  const [imagesOfAdverts, setImagesOfAdverts] = useState<string[]>(imagesOfProduct)
+  const [removedImagesOfAdverts, setRemovedImagesOfAdverts] = useState<string[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<paymentMethods[]>(paymentMethodsOfProduct)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const paymentMethodsKeys = paymentMethods.map(method=>method.key)
+
+
+  // Melhorar em breve usando react-hook-form
+  const [hasTicket, setHasTicket] = useState(paymentMethodsKeys.includes("boleto"))
+  const [hasPix, setHasPix] = useState(paymentMethodsKeys.includes("pix"))
+  const [hasMoney, setHasMoney] = useState(paymentMethodsKeys.includes("cash"))
+  const [hasBankDeposit, setHasBankDeposit] = useState(paymentMethodsKeys.includes("deposit"))
+  const [hasCreditCard, setHasCreditCard] = useState(paymentMethodsKeys.includes("card"))
+
+  const {handleSubmit, control, formState:{errors}} = useForm<AdvertFormData>({
+    resolver: yupResolver(advertFormDataSchema),
+    defaultValues: {
+      title: productExists ? product.name : '',
+      description: productExists ? product.description : '',
+      condition: productCondition,
+      price: productExists ? formatPrice(product.price) : '',
+      accept_trade: productExists ? product.accept_trade : false, 
+    }
+  })
 
   const {colors} = useTheme()
+  const toast = useToast()
+
 
   function handleRemoveAdvertImageOfAdvert(imageDeleted:string){
     const imagesOfAdvertWithoutRemovedOne = imagesOfAdverts.filter((image)=>{
       return image !== imageDeleted
     })
+    const imageExistsInServer = product.product_images.filter(image=>{
+      return `${api.defaults.baseURL}/images/${image.path}` === imageDeleted
+    })[0]
 
+    if(imageExistsInServer){
+      setRemovedImagesOfAdverts(prevState=>[...prevState, imageExistsInServer.id])
+    }
     setImagesOfAdverts(imagesOfAdvertWithoutRemovedOne)
+  }
+
+  async function handleCreatePreviewOfNewAdvert({title, price, accept_trade, condition, description}:AdvertFormData){
+    try{
+      setIsLoading(true)
+      if(imagesOfAdverts.length === 0){
+        throw new AppError("É preciso cadastrar no mínimo uma imagem para o seu anúncio!")
+      }
+
+      if(paymentMethods.length === 0){
+        throw new AppError("É preciso cadastrar no mínimo uma forma de pagamento válido!")
+      }
+
+      if(removedImagesOfAdverts.length !== 0){
+        await api.delete("/products/images", {
+          data: {
+            productImagesIds: removedImagesOfAdverts
+          }
+        })
+      }
+
+      const is_new = condition === "new" ? true : false
+      const priceInNumber = priceToNumber(price)
+
+      const productPreview:ProductPreview = {
+        title,
+        accept_trade,
+        description,
+        is_new,
+        price: priceInNumber,
+        is_active: true,
+        payment_methods: paymentMethods,
+        product_images: imagesOfAdverts
+      }
+
+      addProductPreview(productPreview)
+      navigation.navigate('previewNewAdvert', productExists ? {id: params!.id} : undefined)
+      
+    }catch(error){
+      if(error instanceof AppError){
+        toast.closeAll()
+
+        toast.show({
+          title: error.message,
+          placement: "top",
+          bg: "red.500"
+        })
+      }
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   async function handleAdvertPhotoSelect(){
@@ -64,7 +188,7 @@ export function FormAdvert(){
             fontSize={"lg"}
             color={"gray.900"}
           >
-            Criar anúncio
+            {productExists ? "Editar anúncio" : "Criar anúncio"}
           </Heading>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -88,7 +212,7 @@ export function FormAdvert(){
           <Text
             lineHeight={"sm"}
           >
-            Escolha até 3 imagens para mostrar o quanto seu produto é incrível!
+            Escolha imagens para mostrar o quanto seu produto é incrível!
           </Text>
           <ScrollView 
             horizontal
@@ -156,49 +280,79 @@ export function FormAdvert(){
           >
             Sobre o produto
           </Heading>
-          <Input 
-            placeholder="Título de anúncio"
+          <Controller 
+            control={control}
+            name="title"
+            render={({field})=>(
+              <Input 
+                placeholder="Título de anúncio"
+                value={field.value}
+                onChangeText={field.onChange}
+                errorMessage={errors.title?.message}
+              />
+            )}
           />
-          <Input 
-            placeholder="Descrição do produto"
-            multiline
-            textAlignVertical="top"
-            h={160}
             
+          <Controller 
+            control={control}
+            name="description"
+            render={({field})=>(
+              <Input 
+                placeholder="Descrição do produto"
+                multiline
+                textAlignVertical="top"
+                h={160}
+                errorMessage={errors.description?.message}
+                value={field.value}
+                onChangeText={field.onChange}
+              />
+            )}
           />
-          <Radio.Group
+            
+          <Controller 
+            control={control}
             name="condition"
-          >
-            <HStack
-              space={5}
-              justifyContent={"space-between"}
-            >
-              <Radio 
-                value="new"
-                bg={"gray.200"}
-                _checked={{
-                  borderColor: "blue.500",
-                  _icon:{
-                    color: "blue.500"
-                  }
-                }}
-              >
-                Produto novo
-              </Radio>
-              <Radio 
-                value="used"
-                bg={"gray.200"}
-                _checked={{
-                  borderColor: "blue.500",
-                  _icon:{
-                    color: "blue.500"
-                  }
-                }}
-              >
-                Produto usado
-              </Radio>
-            </HStack>
-          </Radio.Group>
+            render={({field})=>(
+              <FormControl isInvalid={Boolean(errors.condition?.message)}>
+                <Radio.Group
+                  name="condition"
+                  value={field.value}
+                  onChange={field.onChange}
+                >
+                  <HStack
+                    space={5}
+                    justifyContent={"space-between"}
+                  >
+                    <Radio 
+                      value="new"
+                      bg={"gray.200"}
+                      _checked={{
+                        borderColor: "blue.500",
+                        _icon:{
+                          color: "blue.500"
+                        }
+                      }}
+                    >
+                      Produto novo
+                    </Radio>
+                    <Radio 
+                      value="used"
+                      bg={"gray.200"}
+                      _checked={{
+                        borderColor: "blue.500",
+                        _icon:{
+                          color: "blue.500"
+                        }
+                      }}
+                    >
+                      Produto usado
+                    </Radio>
+                  </HStack>
+                </Radio.Group>
+                <FormControl.ErrorMessage>{errors.condition?.message}</FormControl.ErrorMessage>
+              </FormControl>
+            )}
+          />
           
         </VStack>
         <VStack
@@ -211,41 +365,60 @@ export function FormAdvert(){
           >
             Venda
           </Heading>
-          <Box
-            mt={3}
-          >
-            <Input 
-              w={"100%"}
-              fontSize={'md'}
-              fontFamily={'body'}
-              rounded={6}
-              bg={'gray.100'}
-              borderWidth={0}
-              py={3}
-              pl={4}
-              placeholder="Valor do produto"
-              placeholderTextColor={'gray.500'}
-              keyboardType="numeric"
-              _focus={{
-                bg: 'gray.100',
-                borderWidth: 1,
-                borderColor: 'gray.700'
-              }}
-              style={{
-                paddingLeft: 44
-              }}
-            />
-            <Text
-              fontSize={'md'}
-              color={"gray.900"}
-              position={"absolute"}
-              left={4}
-              lineHeight={'2xl'}
-              top={2}
+            <Box
+              mt={3}
             >
-              R$
-            </Text>
-          </Box>
+              
+              <Controller 
+                control={control}
+                name="price"
+                render={({field})=>(
+                  <FormControl isInvalid={Boolean(errors.price?.message)}>
+                    <Input 
+                      w={"100%"}
+                      fontSize={'md'}
+                      fontFamily={'body'}
+                      rounded={6}
+                      bg={'gray.100'}
+                      borderWidth={0}
+                      py={3}
+                      pl={4}
+                      isInvalid={Boolean(errors.price?.message)}
+                      placeholder="Valor do produto"
+                      placeholderTextColor={'gray.500'}
+                      keyboardType="numeric"
+                      _invalid={{
+                        borderWidth: 1,
+                        borderColor: "red.500"
+                      }}
+                      _focus={{
+                        bg: 'gray.100',
+                        borderWidth: 1,
+                        borderColor: 'gray.700'
+                      }}
+                      style={{
+                        paddingLeft: 44
+                      }}
+                      value={field.value}
+                      onChangeText={field.onChange}
+                    />
+                    <FormControl.ErrorMessage>{errors.price?.message}</FormControl.ErrorMessage>
+                  </FormControl>
+                )}
+              />
+                    
+              <Text
+                fontSize={'md'}
+                color={"gray.900"}
+                position={"absolute"}
+                left={4}
+                lineHeight={'2xl'}
+                top={2}
+              >
+                R$
+              </Text>
+            </Box>
+
         </VStack>
         <VStack
             mt={4}
@@ -258,15 +431,21 @@ export function FormAdvert(){
               Aceita troca?
             </Text>
             
-            <Switch 
-              value={acceptTrade}
-              onValueChange={setAcceptTrade}
-              activeText=""
-              inActiveText=""
-              backgroundActive={colors.blue[500]}
-              backgroundInactive={colors.gray[300]}
-              circleBorderActiveColor={colors.blue[500]}
-              circleBorderInactiveColor={colors.gray[300]}
+            <Controller 
+              control={control}
+              name="accept_trade"
+              render={({field})=>(
+                <Switch 
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  activeText=""
+                  inActiveText=""
+                  backgroundActive={colors.blue[500]}
+                  backgroundInactive={colors.gray[300]}
+                  circleBorderActiveColor={colors.blue[500]}
+                  circleBorderInactiveColor={colors.gray[300]}
+                />
+              )}
             />
             
         </VStack>
@@ -287,28 +466,84 @@ export function FormAdvert(){
               <Checkbox 
                 isChecked={hasTicket}
                 label="Boleto"
-                onValueChange={()=>setHasTicket(!hasTicket)}
+                onValueChange={()=>{
+                  setHasTicket(!hasTicket)
+                  // Até aqui o estado não mudou, então irei usar o estado no contexto anterior
+                  setPaymentMethods(prevState=>{
+                    if(!hasTicket === true){
+                      return [...prevState, {key: "boleto", name: "Boleto"}]
+                    }
+                    const paymentMethods = prevState.filter(method=>method.key!=="boleto")
+
+                    return paymentMethods
+                  })
+                }}
               />
               <Checkbox 
                 isChecked={hasPix}
                 label="Pix"
-                onValueChange={()=>setHasPix(!hasPix)}
+                onValueChange={()=>{
+                  setHasPix(!hasPix)
+                  // Até aqui o estado não mudou, então irei usar o estado no contexto anterior
+                  setPaymentMethods(prevState=>{
+                    if(!hasPix === true){
+                      return [...prevState, {key: "pix", name: "Pix"}]
+                    }
+                    const paymentMethods = prevState.filter(method=>method.key!=="pix")
+
+                    return paymentMethods
+                  })
+                }}
               />
               <Checkbox 
                 isChecked={hasMoney}
                 label="Dinheiro"
-                onValueChange={()=>setHasMoney(!hasMoney)}
+                onValueChange={()=>{
+                  setHasMoney(!hasMoney)
+                  // Até aqui o estado não mudou, então irei usar o estado no contexto anterior
+                  setPaymentMethods(prevState=>{
+                    if(!hasMoney === true){
+                      return [...prevState, {key: "cash", name: "Dinheiro"}]
+                    }
+                    const paymentMethods = prevState.filter(method=>method.key!=="cash")
+
+                    return paymentMethods
+                  })
+                }}
               />
               <Checkbox 
                 isChecked={hasCreditCard}
                 label="Cartão de crédito"
-                onValueChange={()=>setHasCreditCard(!hasCreditCard)}
+                onValueChange={()=>{
+                  setHasCreditCard(!hasCreditCard)
+                  // Até aqui o estado não mudou, então irei usar o estado no contexto anterior
+                  setPaymentMethods(prevState=>{
+                    if(!hasCreditCard === true){
+                      return [...prevState, {key: "card", name: "Cartão de Crédito"}]
+                    }
+                    const paymentMethods = prevState.filter(method=>method.key!=="card")
+
+                    return paymentMethods
+                  })
+                }}
               />
               <Checkbox 
                 isChecked={hasBankDeposit}
                 label="Depósito bancário"
-                onValueChange={()=>setHasBankDeposit(!hasBankDeposit)}
+                onValueChange={()=>{
+                  setHasBankDeposit(!hasBankDeposit)
+                  // Até aqui o estado não mudou, então irei usar o estado no contexto anterior
+                  setPaymentMethods(prevState=>{
+                    if(!hasBankDeposit === true){
+                      return [...prevState, {key: "deposit", name: "Depósito bancário"}]
+                    }
+                    const paymentMethods = prevState.filter(method=>method.key!=="deposit")
+
+                    return paymentMethods
+                  })
+                }}
               />
+                  
             </VStack>
             
             
@@ -325,13 +560,15 @@ export function FormAdvert(){
           <Button 
             bgVariant="light" 
             flex={1}
+            onPress={()=>navigation.goBack()}
           >
             <Button.Text textVariant="dark">Cancelar</Button.Text>
           </Button>
           <Button 
             bgVariant="dark" 
             flex={1}
-            onPress={()=>navigation.navigate('previewNewAdvert')}
+            onPress={handleSubmit(handleCreatePreviewOfNewAdvert)}
+            isLoading={isLoading}
           >
             <Button.Text>Avançar</Button.Text>
           </Button>

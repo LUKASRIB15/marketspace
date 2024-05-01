@@ -1,15 +1,36 @@
 import { HStack, Heading, Text, VStack, useTheme, Select, Box, FlatList } from "native-base";
 import { CaretDown, CaretUp, Plus } from "phosphor-react-native";
-import { useState } from "react";
-import { TouchableOpacity } from "react-native";
+import { useCallback, useState } from "react";
+import { Dimensions, TouchableOpacity } from "react-native";
 import { Card } from "../components/Card";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { AppNavigatorRoutesProps } from "../routes/AppRoutes";
+import { useProductsContext } from "../hooks/useProductsContext";
+import { api } from "../lib/api";
+import { useAuthContext } from "../hooks/useAuthContext";
 
 export function Adverts(){
   const {colors} = useTheme()
+  const {productsOfUser, getProductsOfUser} = useProductsContext()
+  const {user} = useAuthContext()
   const navigation = useNavigation<AppNavigatorRoutesProps>()
   const [typeOfFilteredAdverts, setTypeOfFilteredAdverts] = useState("all")
+
+  const products = productsOfUser.filter((product)=>{
+    if(typeOfFilteredAdverts === "actives"){
+      return product.is_active
+    }else if(typeOfFilteredAdverts === "inactives"){
+      return product.is_active === false
+    }
+
+    return product
+  })
+
+  const screenWidth = Dimensions.get("window").width
+
+  useFocusEffect(useCallback(()=>{
+    getProductsOfUser()
+  },[]))
 
   return (
     <VStack
@@ -44,7 +65,7 @@ export function Adverts(){
         justifyContent={"space-between"}
         mb={5}
       >
-        <Text>9 anúncios</Text>
+        <Text>{products.length} anúncios</Text>
         <Box>
           <Select
             minWidth={"110"}
@@ -69,20 +90,26 @@ export function Adverts(){
         </Box>
       </HStack>
       <FlatList 
-        data={[1,2,3,4,5]}
+        data={products}
         keyExtractor={(item)=>item.toString()}
         numColumns={2}
-        columnWrapperStyle={{columnGap:32}}
+        columnWrapperStyle={{columnGap: screenWidth-(154*2)-(24*2)}}
         showsVerticalScrollIndicator={false}
-        renderItem={(({item})=>(
-          <Card
-            isNew={item%2===0}
-            isActive={item%3===1}
-            isMyAdvert
-            key={item} 
-            src={"https://github.com/LUKASRIB15.png"}
-          />
-        ))}
+        renderItem={(({item})=>{
+          return(
+            <Card
+              isNew={item.is_new}
+              isActive={item.is_active}
+              nameOfProduct={item.name}
+              price={item.price}
+              isMyAdvert
+              key={item.id} 
+              idOfProduct={item.id}
+              src={`${api.defaults.baseURL}/images/${user.avatar}`}
+              srcOfProduct={`${api.defaults.baseURL}/images/${item.product_images[0].path}`}
+            />
+          )
+        })}
         contentContainerStyle={{
           paddingBottom: 150,
           rowGap: 32
