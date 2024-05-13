@@ -78,3 +78,9 @@ This screen is important to show the ad creator how the application will be show
 <div align="center">
   <img src="public/preview.jpeg" height="600px">
 </div>
+
+
+# Certificate
+
+![Certificate](https://github.com/LUKASRIB15/marketspace/assets/100320271/c72f3c84-d758-4f78-8e6c-1ac32314c3cb)
+
